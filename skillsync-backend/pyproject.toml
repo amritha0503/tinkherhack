@@ -1,0 +1,26 @@
+[tool]
+name = "skillsync-backend"
+version = "0.1.0"
+description = "Backend implementation for SkillSync application"
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependencies]
+fastapi = "^0.95.0"
+uvicorn = "^0.22.0"
+sqlalchemy = "^2.0.0"
+databases = "^0.6.0"
+pydantic = "^1.10.0"
+python-dotenv = "^0.21.0"
+httpx = "^0.23.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.0.0"
+pytest-asyncio = "^0.18.0"
+mypy = "^0.991"
+black = "^22.3.0"
+isort = "^5.10.0"
