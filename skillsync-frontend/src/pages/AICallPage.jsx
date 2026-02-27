@@ -1,6 +1,6 @@
 ﻿import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getQuestions, extractProfile, saveProfile, transcribeVoice } from '../services/api'
+import { getQuestions, extractProfile, saveProfile } from '../services/api'
 import toast from 'react-hot-toast'
 
 const LANGUAGES = [
@@ -61,9 +61,10 @@ export default function AICallPage() {
   const [ivrLine, setIvrLine]   = useState(0)
   const [showKeys, setShowKeys] = useState(false)
   const [ivrMsg, setIvrMsg]     = useState('')
-  const mediaRef  = useRef(null)
-  const chunksRef = useRef([])
-  const answerRef = useRef(null)
+  const mediaRef       = useRef(null)
+  const chunksRef      = useRef([])
+  const answerRef      = useRef(null)
+  const recognitionRef = useRef(null)
 
   const callActive = ['ivr','interview','reviewing'].includes(stage)
   const timer = useTimer(callActive)
@@ -178,60 +179,60 @@ export default function AICallPage() {
     setStage('dial'); setPhone(''); setLangKey(''); setQs([]); setAnswers({}); setProfile(null)
   }
 
+  // BCP-47 language codes for Web Speech API
+  const LANG_BCP47 = {
+    Malayalam: 'ml-IN', Hindi: 'hi-IN', Tamil: 'ta-IN',
+    Telugu: 'te-IN', Bengali: 'bn-IN', Marathi: 'mr-IN',
+    Kannada: 'kn-IN', English: 'en-IN',
+  }
+
   async function toggleRecording() {
     if (isRecording) {
-      // Stop recording — this triggers onstop which uploads + transcribes
-      mediaRef.current?.stop()
+      recognitionRef.current?.stop()
       setRec(false)
       return
     }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      // Pick best supported format
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm')
-          ? 'audio/webm'
-          : 'audio/ogg'
-      const rec = new MediaRecorder(stream, { mimeType })
-      mediaRef.current = rec
-      chunksRef.current = []
-      rec.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-      rec.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop())
-        const blob = new Blob(chunksRef.current, { type: mimeType })
-        if (blob.size < 1000) {
-          toast.error('Recording too short — please speak longer')
-          return
-        }
-        // Send to backend for transcription
-        const currentQ = questions[current]
-        if (!currentQ) return
-        setTranscribing(true)
-        try {
-          const res = await transcribeVoice(
-            phone.replace(/\D/g, ''),
-            language,
-            currentQ.key,
-            blob
-          )
-          const text = res.data?.transcript || ''
-          if (text) {
-            setAnswer(text)
-            toast.success('Voice transcribed — review and confirm')
-          } else {
-            toast.error('Could not transcribe — please type your answer')
-          }
-        } catch (err) {
-          const msg = err?.response?.data?.detail || 'Transcription failed'
-          toast.error(msg + ' — type your answer instead')
-        } finally {
-          setTranscribing(false)
-        }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      toast.error('Voice input not supported in this browser — please type your answer')
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognitionRef.current = recognition
+    recognition.lang           = LANG_BCP47[language] || 'en-IN'
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
+    recognition.continuous     = false
+
+    recognition.onresult = (e) => {
+      const text = e.results[0][0].transcript
+      if (text) {
+        setAnswer(text)
+        toast.success('Voice captured — review and confirm')
+      } else {
+        toast.error('Could not capture voice — please type your answer')
       }
-      rec.start(100) // collect data every 100ms
+    }
+
+    recognition.onerror = (e) => {
+      if (e.error !== 'aborted') {
+        toast.error(`Voice error (${e.error}) — please type your answer`)
+      }
+      setRec(false)
+      setTranscribing(false)
+    }
+
+    recognition.onend = () => {
+      setRec(false)
+      setTranscribing(false)
+    }
+
+    try {
+      recognition.start()
       setRec(true)
-      toast('🎙 Recording started — speak now', { duration: 2000 })
+      toast('🎙 Listening — speak now', { duration: 2500 })
     } catch {
       toast.error('Microphone access denied')
     }
