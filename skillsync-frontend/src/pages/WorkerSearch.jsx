@@ -6,11 +6,11 @@ const SKILLS = ['Electrician','Plumber','Carpenter','Mason','Painter','Welder','
 const BADGE_COLOR = { Green:'bg-green-100 text-green-800', Yellow:'bg-yellow-100 text-yellow-800', Red:'bg-red-100 text-red-800' }
 
 const SORT_OPTIONS = [
-  { value: 'distance',   label: 'ðŸ“ Nearest first' },
-  { value: 'trust',      label: 'â­ Trust score' },
-  { value: 'price_asc',  label: 'â‚¹ Price: low â†’ high' },
-  { value: 'price_desc', label: 'â‚¹ Price: high â†’ low' },
-  { value: 'exp',        label: 'ðŸ… Most experienced' },
+  { value: 'distance',   label: 'Nearest first' },
+  { value: 'trust',      label: 'Top rated' },
+  { value: 'price_asc',  label: 'Price: low to high' },
+  { value: 'price_desc', label: 'Price: high to low' },
+  { value: 'exp',        label: 'Most experienced' },
 ]
 
 function FilterChip({ label, onRemove }) {
@@ -65,7 +65,7 @@ export default function WorkerSearch() {
       const params = {}
       if (skill)    params.skill_type = skill
       if (location) params.location   = location
-      if (coords)   { params.lat = coords.lat; params.lng = coords.lng; params.radius_km = 500 }
+      if (coords)   { params.lat = coords.lat; params.lng = coords.lng; params.radius_km = 99999 }
       const res = await searchWorkers(params)
       setWorkers(res.data.workers || res.data || [])
     } catch { setWorkers([]) }
@@ -85,6 +85,7 @@ export default function WorkerSearch() {
   const filtered = useMemo(() => {
     let list = [...workers]
     if (skill)       list = list.filter(w => !skill || w.skill_type === skill)
+    if (location)    list = list.filter(w => !location || (w.location_area && w.location_area.toLowerCase().includes(location.toLowerCase())))
     if (minPrice)    list = list.filter(w => (w.daily_rate || 0) >= Number(minPrice))
     if (maxPrice)    list = list.filter(w => (w.daily_rate || 999999) <= Number(maxPrice))
     if (maxDist)     list = list.filter(w => w.distance_km == null || w.distance_km <= Number(maxDist))
@@ -160,7 +161,7 @@ export default function WorkerSearch() {
             <button type="button" onClick={() => setShowFilters(f => !f)}
               className={`flex items-center gap-1.5 border px-4 py-2 rounded-lg text-sm font-semibold transition-colors
                 ${showFilters ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:border-indigo-400'}`}>
-              ðŸŽšï¸ Filters {chips.length > 0 && <span className="bg-indigo-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">{chips.length}</span>}
+              Filters {chips.length > 0 && <span className="bg-indigo-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">{chips.length}</span>}
             </button>
             <button type="submit" className="bg-indigo-600 text-white font-bold px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm">
               Search
@@ -226,7 +227,7 @@ export default function WorkerSearch() {
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Trust Badge</label>
               <div className="flex gap-2 flex-wrap">
-                {[['Any',0],['Green ðŸŸ¢',70],['Yellow ðŸŸ¡',50],['Red ðŸ”´',0]].map(([lbl, val]) => (
+                {[['Any',0],['Green',70],['Yellow',50],['Red',0]].map(([lbl, val]) => (
                   <button key={lbl} type="button"
                     onClick={() => setMinTrust(val)}
                     className={`text-xs px-3 py-1.5 rounded-full border transition-colors font-semibold
@@ -245,7 +246,7 @@ export default function WorkerSearch() {
                   ${aadhaarOnly ? 'bg-green-50 border-green-400 text-green-700' : 'border-gray-200 text-gray-500 hover:border-green-400'}`}>
                 <span className={`w-4 h-4 rounded border-2 flex items-center justify-center text-xs
                   ${aadhaarOnly ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300'}`}>
-                  {aadhaarOnly ? 'âœ“' : ''}
+                  {aadhaarOnly ? '✓' : ''}
                 </span>
                 Aadhaar Verified Only
               </button>
@@ -273,12 +274,12 @@ export default function WorkerSearch() {
         {/* â”€â”€ Results header â”€â”€ */}
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-black text-gray-900">
-            {loading ? 'Searchingâ€¦' : `${filtered.length} Worker${filtered.length !== 1 ? 's' : ''} Found`}
+            {loading ? 'Searching...' : `${filtered.length} Worker${filtered.length !== 1 ? 's' : ''} Found`}
           </h1>
           <div className="text-sm">
-            {locStatus === 'getting' && <span className="text-gray-400">ðŸ“ Getting your locationâ€¦</span>}
-            {locStatus === 'ok'      && <span className="text-green-600 font-semibold">ðŸ“ Location active</span>}
-            {locStatus === 'denied'  && <span className="text-gray-400">ðŸ“ Location not available</span>}
+            {locStatus === 'getting' && <span className="text-gray-400">Getting your location...</span>}
+            {locStatus === 'ok'      && <span className="text-green-600 font-semibold">Location active</span>}
+            {locStatus === 'denied'  && <span className="text-gray-400">Location not available</span>}
           </div>
         </div>
 
@@ -303,7 +304,7 @@ export default function WorkerSearch() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-20">
-            <div className="text-5xl mb-4">ðŸ”</div>
+            <div className="text-5xl mb-4">🔍</div>
             <h3 className="text-xl font-bold text-gray-800 mb-2">No workers found</h3>
             <p className="text-gray-400">Try adjusting your filters</p>
             {chips.length > 0 && (
@@ -337,7 +338,7 @@ export default function WorkerSearch() {
                     )}
                     {w.distance_km != null && (
                       <span className="text-xs font-semibold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full">
-                        ðŸ“ {w.distance_km < 1 ? `${Math.round(w.distance_km * 1000)} m` : `${w.distance_km} km`}
+                        {w.distance_km < 1 ? `${Math.round(w.distance_km * 1000)} m away` : `${w.distance_km} km away`}
                       </span>
                     )}
                   </div>

@@ -125,8 +125,8 @@ async def upload_photos(
 
 @router.get('/search')
 def search_workers(
-    lat: float,
-    lng: float,
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
     skill: Optional[str] = None,
     radius_km: int = 10,
     min_trust: int = 0,
@@ -138,20 +138,38 @@ def search_workers(
         query = query.filter(Worker.skill_type == skill)
     workers = query.all()
     results = []
+    
     for w in workers:
-        if w.location_lat and w.location_lng:
+        ledger = db.query(WorkLedger).filter(WorkLedger.worker_id == w.id).all()
+        avg_rating = round(sum(e.rating for e in ledger) / len(ledger), 1) if ledger else 0
+        
+        if lat is not None and lng is not None and w.location_lat and w.location_lng:
             dist = haversine(lat, lng, w.location_lat, w.location_lng)
-            if dist <= min(radius_km, w.work_radius_km):
-                ledger = db.query(WorkLedger).filter(WorkLedger.worker_id == w.id).all()
-                avg_rating = round(sum(e.rating for e in ledger) / len(ledger), 1) if ledger else 0
+            if dist <= radius_km:
                 results.append({
                     'id': w.id, 'name': w.name, 'skill_type': w.skill_type,
                     'trust_score': w.trust_score, 'trust_badge': w.trust_badge,
                     'distance_km': round(dist, 2), 'daily_rate': w.daily_rate,
                     'experience_years': w.experience_years, 'location_area': w.location_area,
-                    'avg_rating': avg_rating, 'verified_jobs': len(ledger)
+                    'avg_rating': avg_rating, 'verified_jobs': len(ledger),
+                    'aadhaar_verified': w.aadhaar_verified
                 })
-    results.sort(key=lambda x: x['distance_km'])
+        else:
+            # If no coordinates or worker has no location, return without radius filtering
+            results.append({
+                'id': w.id, 'name': w.name, 'skill_type': w.skill_type,
+                'trust_score': w.trust_score, 'trust_badge': w.trust_badge,
+                'distance_km': None, 'daily_rate': w.daily_rate,
+                'experience_years': w.experience_years, 'location_area': w.location_area,
+                'avg_rating': avg_rating, 'verified_jobs': len(ledger),
+                'aadhaar_verified': w.aadhaar_verified
+            })
+
+    if lat is not None and lng is not None:
+        results.sort(key=lambda x: x['distance_km'] if x['distance_km'] is not None else 9999)
+    else:
+        results.sort(key=lambda x: x['trust_score'], reverse=True)
+        
     return {'workers': results[:limit], 'total': len(results)}
 
 @router.get('/{worker_id}/trust-score')
