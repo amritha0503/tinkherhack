@@ -461,9 +461,27 @@ export default function AICallPage() {
     setLoading(true)
     try {
       const res = await extractProfile({ phone: phone.replace(/\D/g,''), language, answers: finalAnswers })
-      setProfile(res.data.profile)
+      const aiProfile = res.data.profile || {}
+      // Always prefer the raw spoken answers for core fields — AI transcript can misparse numbers
+      const merged = {
+        ...aiProfile,
+        name:             finalAnswers.name             || aiProfile.name,
+        skill_type:       finalAnswers.skill            || aiProfile.skill_type,
+        experience_years: parseInt(finalAnswers.experience)  || aiProfile.experience_years || 0,
+        daily_rate:       parseFloat(finalAnswers.daily_rate) || aiProfile.daily_rate      || null,
+        location_hint:    finalAnswers.location         || aiProfile.location_hint,
+        bio_english:      aiProfile.bio_english         || finalAnswers.about,
+      }
+      setProfile(merged)
     } catch {
-      setProfile({ name: finalAnswers.name, skill_type: finalAnswers.skill, bio_english: finalAnswers.about })
+      setProfile({
+        name:             finalAnswers.name,
+        skill_type:       finalAnswers.skill,
+        experience_years: parseInt(finalAnswers.experience)   || 0,
+        daily_rate:       parseFloat(finalAnswers.daily_rate) || null,
+        location_hint:    finalAnswers.location,
+        bio_english:      finalAnswers.about,
+      })
     }
     setLoading(false)
     setStage('done')

@@ -17,7 +17,7 @@ function FilterChip({ label, onRemove }) {
   return (
     <span className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 text-xs font-semibold px-2.5 py-1 rounded-full">
       {label}
-      <button onClick={onRemove} className="hover:text-red-500 ml-0.5 leading-none">âœ•</button>
+      <button onClick={onRemove} className="hover:text-red-500 ml-0.5 leading-none">×</button>
     </span>
   )
 }
@@ -108,11 +108,11 @@ export default function WorkerSearch() {
   const chips = [
     skill       && { label: `Skill: ${skill}`,          clear: () => setSkill('') },
     location    && { label: `Area: ${location}`,         clear: () => setLocation('') },
-    minPrice    && { label: `Min â‚¹${minPrice}/day`,      clear: () => setMinPrice('') },
-    maxPrice    && { label: `Max â‚¹${maxPrice}/day`,      clear: () => setMaxPrice('') },
+    minPrice    && { label: `Min Rs.${minPrice}/day`,     clear: () => setMinPrice('') },
+    maxPrice    && { label: `Max Rs.${maxPrice}/day`,     clear: () => setMaxPrice('') },
     maxDist     && { label: `Within ${maxDist} km`,      clear: () => setMaxDist('') },
     minExp      && { label: `${minExp}+ yrs exp`,        clear: () => setMinExp('') },
-    minTrust>0  && { label: `Trust â‰¥ ${minTrust}`,       clear: () => setMinTrust(0) },
+    minTrust>0  && { label: `Trust >= ${minTrust}`,      clear: () => setMinTrust(0) },
     aadhaarOnly && { label: `Aadhaar verified`,          clear: () => setAadhaarOnly(false) },
   ].filter(Boolean)
 
@@ -174,11 +174,11 @@ export default function WorkerSearch() {
           <div className="bg-white rounded-2xl border border-indigo-100 shadow-sm p-5 mb-4 grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
             {/* Price range */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Daily Rate (â‚¹)</label>
+              <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Daily Rate (Rs.)</label>
               <div className="flex items-center gap-2">
                 <input type="number" placeholder="Min" value={minPrice} onChange={e => setMinPrice(e.target.value)}
                   className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-                <span className="text-gray-400 text-xs">â€“</span>
+                <span className="text-gray-400 text-xs">to</span>
                 <input type="number" placeholder="Max" value={maxPrice} onChange={e => setMaxPrice(e.target.value)}
                   className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
@@ -352,7 +352,7 @@ export default function WorkerSearch() {
                     {w.experience_years || 0} yrs exp
                   </span>
                   {w.aadhaar_verified && (
-                    <span className="bg-green-50 text-green-700 text-xs px-2.5 py-1 rounded-full">âœ“ Aadhaar</span>
+                    <span className="bg-green-50 text-green-700 text-xs px-2.5 py-1 rounded-full">Aadhaar Verified</span>
                   )}
                 </div>
 
@@ -362,9 +362,9 @@ export default function WorkerSearch() {
 
                 <div className="flex items-center justify-between pt-3 border-t border-gray-50">
                   <span className="text-sm font-bold text-gray-900">
-                    â‚¹{w.daily_rate || 'â€”'}<span className="text-xs font-normal text-gray-400">/day</span>
+                    Rs.{w.daily_rate || '--'}<span className="text-xs font-normal text-gray-400">/day</span>
                   </span>
-                  <span className="text-xs text-indigo-600 font-semibold group-hover:underline">View Profile â†’</span>
+                  <span className="text-xs text-indigo-600 font-semibold group-hover:underline">View Profile &rarr;</span>
                 </div>
               </div>
             ))}

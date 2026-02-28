@@ -385,6 +385,8 @@ def save_worker_profile(phone: str, profile: dict, db: Session = Depends(get_db)
     """
     Save or update worker profile in the database after AI call completes.
     """
+    import re as _re
+
     worker = db.query(models.Worker).filter(models.Worker.phone == phone).first()
     if not worker:
         worker = models.Worker(phone=phone)
@@ -392,9 +394,31 @@ def save_worker_profile(phone: str, profile: dict, db: Session = Depends(get_db)
 
     worker.name = profile.get("name") or worker.name
     worker.skill_type = profile.get("skill_type") or worker.skill_type
-    worker.experience_years = profile.get("experience_years") or worker.experience_years
-    worker.daily_rate = profile.get("daily_rate") or worker.daily_rate
+
+    # experience_years: may arrive as int 5 or string "5 years" or "5"
+    exp = profile.get("experience_years")
+    if exp is not None:
+        try:
+            nums = _re.findall(r'\d+', str(exp))
+            if nums:
+                worker.experience_years = int(nums[0])
+        except Exception:
+            pass
+
+    # daily_rate: may arrive as float 500.0, int 500, or string "500" / "Rs.500/day"
+    rate = profile.get("daily_rate")
+    if rate is not None:
+        try:
+            nums = _re.findall(r'\d+', str(rate))
+            if nums:
+                worker.daily_rate = float(nums[0])
+        except Exception:
+            pass
+
     worker.bio_text = profile.get("bio_text") or profile.get("bio_english") or worker.bio_text
+    # location_hint comes from extract-profile which maps the 'location' answer
+    worker.location_area = profile.get("location_hint") or profile.get("location_area") or worker.location_area
+    worker.account_status = 'active'
     worker.profile_complete = True
 
     db.commit()
