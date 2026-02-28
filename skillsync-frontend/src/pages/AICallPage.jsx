@@ -289,25 +289,29 @@ export default function AICallPage() {
     rec.onresult = async (e) => {
       const text = e.results[0]?.[0]?.transcript || ''
       setVoiceStage('confirming')
-      if (langRef.current !== 'English' && text.trim()) {
+      if (text.trim()) {
         setSpokenText('Translating…')
         setEditText(text)
         try {
-          const res = await fetch('/api/ai-call/translate', {
+          const apiBase = import.meta.env.VITE_API_URL
+            ? import.meta.env.VITE_API_URL + '/api'
+            : '/api'
+          const res = await fetch(`${apiBase}/ai-call/translate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, source_language: langRef.current })
+            body: JSON.stringify({ text, source_language: langRef.current || 'auto' })
           })
+          if (!res.ok) throw new Error('translate_failed')
           const data = await res.json()
-          const eng = data.translated || text
+          const eng = data.translated && data.translated.trim() ? data.translated : text
           setSpokenText(eng)
           setEditText(eng)
         } catch {
-          // Translation failed — switch to typing mode so user can type in English
+          // Translation failed — fall back to typing mode with original text
           setVoiceStage('typing')
           setEditText(text)
           setSpokenText(text)
-          toast.error('Could not translate — please type your answer in English')
+          toast.error('Translation failed — please type your answer in English')
           setTimeout(() => answerRef.current?.focus(), 100)
         }
       } else {

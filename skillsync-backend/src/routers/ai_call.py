@@ -200,15 +200,18 @@ def translate_to_english(req: TranslateRequest):
     """
     Translate text from any Indian language to English.
     Uses deep-translator (free, no API key required).
+    Always runs auto-detect so even 'English' selected users who
+    speak a native language get their text translated correctly.
     """
-    if req.source_language == "English":
-        return {"translated": req.text, "original": req.text}
     try:
         from deep_translator import GoogleTranslator
         translated = GoogleTranslator(source='auto', target='en').translate(req.text)
-        return {"translated": translated, "original": req.text}
+        # If translation returned same text or empty, return original
+        result = translated.strip() if translated else req.text
+        return {"translated": result, "original": req.text}
     except Exception as e:
-        raise HTTPException(500, detail=f"Translation failed: {str(e)}")
+        # Return original text instead of crashing so UI degrades gracefully
+        return {"translated": req.text, "original": req.text, "error": str(e)}
 
 
 class GenerateOTPRequest(BaseModel):
