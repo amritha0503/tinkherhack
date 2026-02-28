@@ -154,10 +154,13 @@ export default function AICallPage() {
   const [voiceStage, setVoiceStage]   = useState('speaking')
   const [spokenText, setSpokenText]   = useState('')   // live captured transcript
   const [editText, setEditText]       = useState('')   // editable copy in 'typing'
-  const answerRef      = useRef(null)
-  const recognitionRef = useRef(null)
-  const audioRef       = useRef(null)  // current TTS audio element
-  const langRef        = useRef('')    // always-current language for callbacks
+  const [demoOtp, setDemoOtp]         = useState('')   // OTP shown inline on OTP question
+  const [otpLoading, setOtpLoading]   = useState(false)
+  const answerRef        = useRef(null)
+  const recognitionRef   = useRef(null)
+  const audioRef         = useRef(null)  // current TTS audio element
+  const langRef          = useRef('')    // always-current language for callbacks
+  const aadhaarLast4Ref  = useRef('')    // last4 digits stored for OTP generation
 
   const callActive = ['ivr','interview','reviewing'].includes(stage)
   const timer = useTimer(callActive)
@@ -222,7 +225,22 @@ export default function AICallPage() {
     setEditText('')
     speakText(questions[current].question, language)
   }, [current])
-
+  // ── Auto-generate OTP when the aadhaar_otp question becomes active ─────────────
+  useEffect(() => {
+    if (stage !== 'interview') return
+    const q = questions[current]
+    if (!q || q.key !== 'aadhaar_otp') return
+    setDemoOtp('')
+    setOtpLoading(true)
+    fetch(apiBase + '/ai-call/generate-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: phone.replace(/\D/g, ''), aadhaar_last4: aadhaarLast4Ref.current })
+    })
+      .then(r => r.json())
+      .then(data => { setDemoOtp(data.demo_otp || ''); setOtpLoading(false) })
+      .catch(() => { setDemoOtp(''); setOtpLoading(false) })
+  }, [current, stage])
   // ── TTS: speak text via backend gTTS — works for ALL Indian languages ───────
   async function speakText(text, lang) {
     stopAudio()
@@ -350,23 +368,9 @@ export default function AICallPage() {
     const updated = { ...answers, [q.key]: text.trim() }
     setAnswers(updated)
 
-    // After aadhaar_last4 is answered → generate & send OTP
+    // Store aadhaar_last4 in ref so the OTP-generation effect can use it
     if (q.key === 'aadhaar_last4') {
-      try {
-        const res = await fetch(apiBase + '/ai-call/generate-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: phone.replace(/\D/g, ''), aadhaar_last4: text.trim() })
-        })
-        const data = await res.json()
-        // Demo: show the OTP in a prominent toast so tester can relay it
-        toast.success(
-          `OTP sent to Aadhaar-registered mobile.\n📟 Demo OTP: ${data.demo_otp}`,
-          { duration: 15000, style: { fontWeight: 'bold', fontSize: '14px' } }
-        )
-      } catch {
-        toast('Could not generate OTP — backend may be offline', { icon: '⚠️' })
-      }
+      aadhaarLast4Ref.current = text.trim()
     }
 
     // After aadhaar_otp is answered → verify it
@@ -480,7 +484,8 @@ export default function AICallPage() {
     stopAudio()
     recognitionRef.current?.abort()
     setStage('dial'); setPhone(''); setLangKey(''); setQs([]); setAnswers({}); setProfile(null)
-    setVoiceStage('speaking'); setSpokenText(''); setEditText('')
+    setVoiceStage('speaking'); setSpokenText(''); setEditText(''); setDemoOtp('')
+    aadhaarLast4Ref.current = ''
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -611,6 +616,23 @@ export default function AICallPage() {
                     {q?.question}
                   </div>
                 </div>
+
+                {/* OTP display box — shown only on aadhaar_otp question */}
+                {q?.key === 'aadhaar_otp' && (
+                  <div className="mb-4 rounded-xl border border-yellow-500/60 bg-yellow-500/10 px-4 py-3 text-center">
+                    {otpLoading ? (
+                      <p className="text-yellow-300 text-xs animate-pulse">Generating OTP...</p>
+                    ) : demoOtp ? (
+                      <>
+                        <p className="text-yellow-400 text-xs font-semibold uppercase tracking-wide mb-1">Your OTP (Demo)</p>
+                        <p className="text-yellow-200 text-3xl font-black tracking-widest">{demoOtp}</p>
+                        <p className="text-yellow-500 text-xs mt-1">Speak or type this number above</p>
+                      </>
+                    ) : (
+                      <p className="text-red-400 text-xs">Could not generate OTP — check backend connection</p>
+                    )}
+                  </div>
+                )}
 
                 {/* SPEAKING */}
                 {voiceStage === 'speaking' && (
