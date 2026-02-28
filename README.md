@@ -15,7 +15,6 @@
 ### Hosted Project Link
 - **Frontend:** https://tinkherhack-69tm-dkjvagqi2-neha-georges-projects.vercel.app/
 - **Backend API:** https://tinkherhack-euby.onrender.com
-- **API Docs:** https://tinkherhack-euby.onrender.com/docs
 
 ---
 
@@ -26,7 +25,7 @@ SkillSync is a voice-first, multilingual platform that gives informal sector wor
 India has 450+ million informal skilled workers — plumbers, electricians, carpenters, painters — who are digitally invisible. They lose high-paying formal gigs because they have no verifiable digital presence, no review history, and no way to prove their skills. Customers can't trust them. Workers can't grow.
 
 ### The Solution
-SkillSync onboards workers through a guided AI voice call in 8 Indian languages — no typing, no smartphone required. It verifies identity via Aadhaar OTP, converts voice answers into a structured profile, calculates a Trust Score from verified job history, and lets customers find, call, and review workers — all through one platform.
+SkillSync onboards workers through a guided AI voice call in  Indian languages — no typing, no smartphone required. It verifies identity via Aadhaar OTP, converts voice answers into a structured profile, calculates a Trust Score from verified job history, and lets customers find, call, and review workers — all through one platform.
 
 ---
 
@@ -361,7 +360,8 @@ Validates QR code for work ledger signoff
 
 ## Team Contributions
 
-- **Amritha:** Full-stack development, AI/NLP pipeline, voice onboarding, deployment, UI/UX
+- Amritha: Full-stack development, AI/NLP pipeline
+- Neha :  voice onboarding, deployment, UI/UX
 
 ---
 
