@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import JobRequest, QRCode
 from auth import verify_token
-from ai import analyze_complaint_photo
 from pydantic import BaseModel
 from typing import Optional
 from uuid import uuid4
@@ -70,10 +69,6 @@ async def create_job(
         with open(filepath, 'wb') as f:
             shutil.copyfileobj(complaint_photo.file, f)
         job.complaint_photo_path = filepath
-        ai_result = analyze_complaint_photo(filepath)
-        job.ai_issue_type = ai_result.get('issue_type')
-        job.ai_description = ai_result.get('description_for_worker')
-        ai_analysis = ai_result
     db.add(job)
     db.commit()
     return {'request_id': job.id, 'status': 'pending', 'ai_analysis': ai_analysis}
