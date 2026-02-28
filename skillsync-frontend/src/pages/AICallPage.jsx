@@ -383,10 +383,22 @@ export default function AICallPage() {
         if (data.verified) {
           toast.success('✅ OTP Validated!', { duration: 5000 })
         } else {
-          toast.success('✅ OTP Validated!', { duration: 5000 })
+          // Wrong OTP — clear the answer and make the user re-enter
+          setAnswers(answers)          // revert to before this answer
+          setSpokenText('')
+          setEditText('')
+          setVoiceStage('idle')
+          toast.error('❌ Incorrect OTP. Please try again.', { duration: 5000 })
+          return
         }
       } catch {
-        toast.success('✅ OTP Validated!', { duration: 5000 })
+        // Backend unreachable — block progress as well
+        setAnswers(answers)
+        setSpokenText('')
+        setEditText('')
+        setVoiceStage('idle')
+        toast.error('OTP verification failed. Please try again.', { duration: 5000 })
+        return
       }
     }
 
