@@ -162,6 +162,11 @@ export default function AICallPage() {
   const callActive = ['ivr','interview','reviewing'].includes(stage)
   const timer = useTimer(callActive)
 
+  // ── API base — defined once so all async functions can use it ───────────────
+  const apiBase = import.meta.env.VITE_API_URL
+    ? import.meta.env.VITE_API_URL + '/api'
+    : '/api'
+
   // keep langRef in sync so async callbacks always have the right locale
   useEffect(() => { langRef.current = language }, [language])
 
@@ -222,10 +227,6 @@ export default function AICallPage() {
   async function speakText(text, lang) {
     stopAudio()
     setVoiceStage('speaking')
-
-    const apiBase = import.meta.env.VITE_API_URL
-      ? import.meta.env.VITE_API_URL + '/api'
-      : '/api'
 
     let done = false
     const safety = setTimeout(() => {
@@ -305,9 +306,6 @@ export default function AICallPage() {
         setSpokenText('Translating…')
         setEditText(text)
         try {
-          const apiBase = import.meta.env.VITE_API_URL
-            ? import.meta.env.VITE_API_URL + '/api'
-            : '/api'
           const res = await fetch(`${apiBase}/ai-call/translate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -381,23 +379,24 @@ export default function AICallPage() {
         })
         const data = await res.json()
         if (data.verified) {
-          toast.success('✅ OTP Validated!', { duration: 5000 })
+          toast.success('✅ OTP Validated! Identity confirmed.', { duration: 5000 })
+          // fall through to advance to next question / doExtract
         } else {
-          // Wrong OTP — clear the answer and make the user re-enter
-          setAnswers(answers)          // revert to before this answer
+          // Wrong OTP — revert answer, re-ask question, let user try again
+          setAnswers(prev => { const c = {...prev}; delete c[q.key]; return c })
           setSpokenText('')
           setEditText('')
-          setVoiceStage('idle')
-          toast.error('❌ Incorrect OTP. Please try again.', { duration: 5000 })
+          toast.error('❌ Incorrect OTP. Please listen and try again.', { duration: 5000 })
+          speakText(q.question, language)   // re-announce the OTP question
           return
         }
       } catch {
-        // Backend unreachable — block progress as well
-        setAnswers(answers)
+        // Backend unreachable — block progress
+        setAnswers(prev => { const c = {...prev}; delete c[q.key]; return c })
         setSpokenText('')
         setEditText('')
-        setVoiceStage('idle')
-        toast.error('OTP verification failed. Please try again.', { duration: 5000 })
+        toast.error('OTP verification failed — please check your connection and try again.', { duration: 5000 })
+        speakText(q.question, language)
         return
       }
     }
