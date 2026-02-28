@@ -223,16 +223,20 @@ export default function AICallPage() {
     stopAudio()
     setVoiceStage('speaking')
 
+    const apiBase = import.meta.env.VITE_API_URL
+      ? import.meta.env.VITE_API_URL + '/api'
+      : '/api'
+
     let done = false
     const safety = setTimeout(() => {
       if (done) return
       done = true
       setVoiceStage('listening')
       startListening(langRef.current)
-    }, 20000)
+    }, 8000)
 
     try {
-      const res = await fetch('/api/ai-call/tts', {
+      const res = await fetch(`${apiBase}/ai-call/tts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, language: lang })
@@ -259,7 +263,15 @@ export default function AICallPage() {
         setVoiceStage('listening')
         startListening(langRef.current)
       }
-      audio.play()
+      // play() can throw if autoplay blocked; catch and fall through
+      await audio.play().catch(() => {
+        if (done) return
+        done = true
+        clearTimeout(safety)
+        URL.revokeObjectURL(url)
+        setVoiceStage('listening')
+        startListening(langRef.current)
+      })
     } catch {
       if (done) return
       done = true
