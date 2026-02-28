@@ -9,13 +9,13 @@
 ### Team Name: Antigravity
 
 ### Team Members
-- Member 1: Amritha — College of Engineering Trivandrum
-- Member 2: [Name] — [College]
+- Member 1: Amritha — Mar Athanasius College Of Engineering
+- Member 2: Neha — Mar Athanasius College Of Engineering
 
 ### Hosted Project Link
-- **Frontend:** https://skillsync-frontend.vercel.app
-- **Backend API:** https://skillsync-backend.onrender.com
-- **API Docs:** https://skillsync-backend.onrender.com/docs
+- **Frontend:** https://tinkherhack-69tm-dkjvagqi2-neha-georges-projects.vercel.app/
+- **Backend API:** https://tinkherhack-euby.onrender.com
+- **API Docs:** https://tinkherhack-euby.onrender.com/docs
 
 ---
 
