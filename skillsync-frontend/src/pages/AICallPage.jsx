@@ -14,6 +14,25 @@ const LANGUAGES = [
   { key: '8', name: 'English',   script: 'English' },
 ]
 
+// BCP-47 locale for both TTS and SpeechRecognition
+const LANG_BCP47 = {
+  Malayalam: 'ml-IN', Hindi: 'hi-IN', Tamil: 'ta-IN',
+  Telugu: 'te-IN', Bengali: 'bn-IN', Marathi: 'mr-IN',
+  Kannada: 'kn-IN', English: 'en-IN',
+}
+
+// English audio fallback — used when no native TTS voice is installed (e.g. Windows)
+const QUESTIONS_EN_AUDIO = {
+  name:           'What is your full name?',
+  skill:          'What is your main skill or trade? For example: plumber, electrician, carpenter, cook, or painter?',
+  experience:     'How many years of experience do you have in this work?',
+  location:       'Which city or area do you work in?',
+  daily_rate:     'How much do you charge per day for your work? Please say the amount in rupees.',
+  about:          'Tell us a little about yourself and the kind of work you have done before.',
+  aadhaar_last4:  'Please tell us the last 4 digits of your Aadhaar card for identity verification.',
+  aadhaar_otp:    'We have sent a one-time password to your Aadhaar-registered mobile. Please say the OTP now.',
+}
+
 const IVR_LINES = [
   'Welcome to SkillSync — the worker profile platform.',
   '',
@@ -43,203 +62,44 @@ function useTimer(active) {
   return mm + ':' + ss
 }
 
-export default function AICallPage() {
-  const navigate    = useNavigate()
-  const [stage, setStage]       = useState('dial')
-  const [phone, setPhone]       = useState('')
-  const [langKey, setLangKey]   = useState('')
-  const [language, setLang]     = useState('')
-  const [greeting, setGreeting] = useState('')
-  const [questions, setQs]      = useState([])
-  const [current, setCurrent]   = useState(0)
-  const [answers, setAnswers]   = useState({})
-  const [answer, setAnswer]     = useState('')
-  const [profile, setProfile]   = useState(null)
-  const [loading, setLoading]   = useState(false)
-  const [isRecording, setRec]   = useState(false)
-  const [transcribing, setTranscribing] = useState(false)
-  const [ivrLine, setIvrLine]   = useState(0)
-  const [showKeys, setShowKeys] = useState(false)
-  const [ivrMsg, setIvrMsg]     = useState('')
-  const mediaRef       = useRef(null)
-  const chunksRef      = useRef([])
-  const answerRef      = useRef(null)
-  const recognitionRef = useRef(null)
+// Animated sound-wave bars shown while AI is speaking
+function SoundWave() {
+  return (
+    <div className="flex items-end gap-0.5 h-6">
+      {[1,2,3,4,5,4,3,2,1,2,3,4].map((h, i) => (
+        <div
+          key={i}
+          className="w-1 bg-indigo-400 rounded-full"
+          style={{
+            height: `${h * 4}px`,
+            animation: `soundbar 0.8s ease-in-out ${(i * 0.07).toFixed(2)}s infinite alternate`,
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes soundbar {
+          from { transform: scaleY(0.4); opacity: 0.5; }
+          to   { transform: scaleY(1.4); opacity: 1; }
+        }
+      `}</style>
+    </div>
+  )
+}
 
-  const callActive = ['ivr','interview','reviewing'].includes(stage)
-  const timer = useTimer(callActive)
+// Pulsing mic shown while listening
+function MicPulse() {
+  return (
+    <div className="relative flex items-center justify-center w-14 h-14 mx-auto">
+      <div className="absolute inset-0 bg-red-500 rounded-full opacity-25 animate-ping" />
+      <div className="absolute inset-2 bg-red-500 rounded-full opacity-30 animate-ping" style={{animationDelay:'0.3s'}} />
+      <div className="relative w-14 h-14 bg-red-600 rounded-full flex items-center justify-center text-2xl shadow-lg">🎙</div>
+    </div>
+  )
+}
 
-  // IVR typewriter effect
-  useEffect(() => {
-    if (stage !== 'ivr') return
-    setIvrLine(0)
-    setShowKeys(false)
-    setIvrMsg('')
-    let line = 0
-    const interval = setInterval(() => {
-      if (line < IVR_LINES.length) {
-        setIvrMsg(prev => prev + IVR_LINES[line] + '\n')
-        line++
-      } else {
-        clearInterval(interval)
-        setShowKeys(true)
-      }
-    }, 180)
-    return () => clearInterval(interval)
-  }, [stage])
-
-  // Keyboard shortcut for language selection
-  useEffect(() => {
-    if (stage !== 'ivr' || !showKeys) return
-    function onKey(e) {
-      if ('12345678'.includes(e.key)) handleLangKey(e.key)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [stage, showKeys])
-
-  async function handleCall() {
-    const digits = phone.replace(/\D/g, '')
-    if (digits.length < 10) { toast.error('Enter a valid 10-digit number'); return }
-    setStage('ringing')
-    await new Promise(r => setTimeout(r, 3000))
-    setStage('ivr')
-  }
-
-  async function handleLangKey(k) {
-    if (loading) return
-    const lang = LANGUAGES.find(l => l.key === k)
-    if (!lang) return
-    setLangKey(k)
-    setLang(lang.name)
-    setShowKeys(false)
-    setIvrMsg('You selected ' + lang.name + ' (' + lang.script + ').\n\nConnecting you to interview questions in ' + lang.name + '...\n\nPlease hold.')
-    setLoading(true)
-    try {
-      const res = await getQuestions(phone.replace(/\D/g,''), k)
-      setGreeting(res.data.greeting || '')
-      setQs(res.data.questions || [])
-      setCurrent(0)
-      setAnswers({})
-      setAnswer('')
-      setStage('interview')
-    } catch {
-      toast.error('Backend error — is the server running on port 8000?')
-      setStage('ivr')
-      setShowKeys(true)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (stage === 'interview' && questions[current]) {
-      setAnswer('')
-      setTimeout(() => answerRef.current?.focus(), 100)
-    }
-  }, [current, stage])
-
-  function handleAnswer() {
-    if (!answer.trim()) { toast.error('Please type your answer'); return }
-    const q = questions[current]
-    const updated = { ...answers, [q.key]: answer.trim() }
-    setAnswers(updated)
-    if (current + 1 < questions.length) {
-      setCurrent(c => c + 1)
-    } else {
-      doExtract(updated)
-    }
-  }
-
-  async function doExtract(finalAnswers) {
-    setStage('reviewing')
-    setLoading(true)
-    try {
-      const res = await extractProfile({ phone: phone.replace(/\D/g,''), language, answers: finalAnswers })
-      setProfile(res.data.profile)
-    } catch {
-      setProfile({ name: finalAnswers.name, skill_type: finalAnswers.skill, bio_english: finalAnswers.about })
-    }
-    setLoading(false)
-    setStage('done')
-  }
-
-  async function handleSave() {
-    setLoading(true)
-    try {
-      await saveProfile(phone.replace(/\D/g,''), profile)
-      toast.success('Profile saved! Worker is now discoverable by customers.')
-      setTimeout(() => navigate('/search'), 1500)
-    } catch {
-      toast.error('Save failed')
-    } finally { setLoading(false) }
-  }
-
-  function endCall() {
-    setStage('dial'); setPhone(''); setLangKey(''); setQs([]); setAnswers({}); setProfile(null)
-  }
-
-  // BCP-47 language codes for Web Speech API
-  const LANG_BCP47 = {
-    Malayalam: 'ml-IN', Hindi: 'hi-IN', Tamil: 'ta-IN',
-    Telugu: 'te-IN', Bengali: 'bn-IN', Marathi: 'mr-IN',
-    Kannada: 'kn-IN', English: 'en-IN',
-  }
-
-  async function toggleRecording() {
-    if (isRecording) {
-      recognitionRef.current?.stop()
-      setRec(false)
-      return
-    }
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognition) {
-      toast.error('Voice input not supported in this browser — please type your answer')
-      return
-    }
-
-    const recognition = new SpeechRecognition()
-    recognitionRef.current = recognition
-    recognition.lang           = LANG_BCP47[language] || 'en-IN'
-    recognition.interimResults = false
-    recognition.maxAlternatives = 1
-    recognition.continuous     = false
-
-    recognition.onresult = (e) => {
-      const text = e.results[0][0].transcript
-      if (text) {
-        setAnswer(text)
-        toast.success('Voice captured — review and confirm')
-      } else {
-        toast.error('Could not capture voice — please type your answer')
-      }
-    }
-
-    recognition.onerror = (e) => {
-      if (e.error !== 'aborted') {
-        toast.error(`Voice error (${e.error}) — please type your answer`)
-      }
-      setRec(false)
-      setTranscribing(false)
-    }
-
-    recognition.onend = () => {
-      setRec(false)
-      setTranscribing(false)
-    }
-
-    try {
-      recognition.start()
-      setRec(true)
-      toast('🎙 Listening — speak now', { duration: 2500 })
-    } catch {
-      toast.error('Microphone access denied')
-    }
-  }
-
-  // Phone call frame wrapper
-  const PhoneFrame = ({ children }) => (
+// Stable top-level component — NOT defined inside AICallPage so it never remounts
+function PhoneFrame({ timer, phone, endCall, children }) {
+  return (
     <div className="w-full max-w-sm mx-auto">
       <div className="bg-gray-900 rounded-3xl border-2 border-gray-700 shadow-2xl overflow-hidden">
         <div className="bg-green-700 px-5 py-3 flex items-center justify-between">
@@ -267,7 +127,332 @@ export default function AICallPage() {
       <p className="text-center text-xs text-gray-600 mt-2">Tap 📵 to end call</p>
     </div>
   )
+}
 
+export default function AICallPage() {
+  const navigate = useNavigate()
+
+  // ── Core state ──────────────────────────────────────────────────────────────
+  const [stage, setStage]       = useState('dial')
+  const [phone, setPhone]       = useState('')
+  const [langKey, setLangKey]   = useState('')
+  const [language, setLang]     = useState('')
+  const [greeting, setGreeting] = useState('')
+  const [questions, setQs]      = useState([])
+  const [current, setCurrent]   = useState(0)
+  const [answers, setAnswers]   = useState({})
+  const [profile, setProfile]   = useState(null)
+  const [loading, setLoading]   = useState(false)
+  const [showKeys, setShowKeys] = useState(false)
+  const [ivrMsg, setIvrMsg]     = useState('')
+
+  // ── Interview voice-state machine ───────────────────────────────────────────
+  // 'speaking' → AI TTS reads question
+  // 'listening' → SpeechRecognition captures worker's voice
+  // 'confirming' → show transcribed text, let worker confirm / re-record / edit
+  // 'typing' → manual text input fallback
+  const [voiceStage, setVoiceStage]   = useState('speaking')
+  const [spokenText, setSpokenText]   = useState('')   // live captured transcript
+  const [editText, setEditText]       = useState('')   // editable copy in 'typing'
+  const answerRef      = useRef(null)
+  const recognitionRef = useRef(null)
+  const audioRef       = useRef(null)  // current TTS audio element
+  const langRef        = useRef('')    // always-current language for callbacks
+
+  const callActive = ['ivr','interview','reviewing'].includes(stage)
+  const timer = useTimer(callActive)
+
+  // keep langRef in sync so async callbacks always have the right locale
+  useEffect(() => { langRef.current = language }, [language])
+
+  // ── Cleanup on unmount ──────────────────────────────────────────────────────
+  useEffect(() => () => {
+    stopAudio()
+    recognitionRef.current?.abort()
+  }, [])
+
+  // ── Stop current TTS audio ──────────────────────────────────────────────
+  function stopAudio() {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.src = ''
+      audioRef.current = null
+    }
+  }
+
+  // ── IVR typewriter ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (stage !== 'ivr') return
+    setShowKeys(false)
+    setIvrMsg('')
+    let line = 0
+    const interval = setInterval(() => {
+      if (line < IVR_LINES.length) {
+        setIvrMsg(prev => prev + IVR_LINES[line] + '\n')
+        line++
+      } else {
+        clearInterval(interval)
+        setShowKeys(true)
+      }
+    }, 180)
+    return () => clearInterval(interval)
+  }, [stage])
+
+  // ── Keyboard shortcut for IVR language selection ────────────────────────────
+  useEffect(() => {
+    if (stage !== 'ivr' || !showKeys) return
+    function onKey(e) {
+      if ('12345678'.includes(e.key)) handleLangKey(e.key)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [stage, showKeys])
+
+  // ── Auto-speak when a new question arrives ──────────────────────────────────
+  // ── Auto-advance to next question (NOT first — first is spoken by handleLangKey directly)
+  useEffect(() => {
+    if (stage !== 'interview' || current === 0 || !questions[current]) return
+    setVoiceStage('speaking')
+    setSpokenText('')
+    setEditText('')
+    speakText(questions[current].question, language)
+  }, [current])
+
+  // ── TTS: speak text via backend gTTS — works for ALL Indian languages ───────
+  async function speakText(text, lang) {
+    stopAudio()
+    setVoiceStage('speaking')
+
+    let done = false
+    const safety = setTimeout(() => {
+      if (done) return
+      done = true
+      setVoiceStage('listening')
+      startListening(langRef.current)
+    }, 20000)
+
+    try {
+      const res = await fetch('/api/ai-call/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, language: lang })
+      })
+      if (!res.ok) throw new Error('TTS failed')
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audioRef.current = audio
+
+      audio.onended = () => {
+        if (done) return
+        done = true
+        clearTimeout(safety)
+        URL.revokeObjectURL(url)
+        setVoiceStage('listening')
+        startListening(langRef.current)
+      }
+      audio.onerror = () => {
+        if (done) return
+        done = true
+        clearTimeout(safety)
+        URL.revokeObjectURL(url)
+        setVoiceStage('listening')
+        startListening(langRef.current)
+      }
+      audio.play()
+    } catch {
+      if (done) return
+      done = true
+      clearTimeout(safety)
+      setVoiceStage('listening')
+      startListening(langRef.current)
+    }
+  }
+
+  // ── SpeechRecognition: capture worker's voice ───────────────────────────────
+  function startListening(lang) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) {
+      // Browser doesn't support it — fall through to typing
+      setVoiceStage('typing')
+      setTimeout(() => answerRef.current?.focus(), 100)
+      return
+    }
+    recognitionRef.current?.abort()
+    const rec = new SR()
+    recognitionRef.current = rec
+    rec.lang            = LANG_BCP47[lang] || 'en-IN'
+    rec.interimResults  = false
+    rec.maxAlternatives = 1
+    rec.continuous      = false
+
+    rec.onresult = async (e) => {
+      const text = e.results[0]?.[0]?.transcript || ''
+      setVoiceStage('confirming')
+      if (langRef.current !== 'English' && text.trim()) {
+        setSpokenText('Translating…')
+        setEditText(text)
+        try {
+          const res = await fetch('/api/ai-call/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, source_language: langRef.current })
+          })
+          const data = await res.json()
+          const eng = data.translated || text
+          setSpokenText(eng)
+          setEditText(eng)
+        } catch {
+          setSpokenText(text)
+          setEditText(text)
+        }
+      } else {
+        setSpokenText(text)
+        setEditText(text)
+      }
+    }
+    rec.onerror = (e) => {
+      if (e.error !== 'aborted') {
+        setVoiceStage('typing')
+        setTimeout(() => answerRef.current?.focus(), 100)
+      }
+    }
+    rec.onend = () => {
+      // if no result came through, onerror will have handled it; otherwise confirming is set
+    }
+    try { rec.start() } catch { setVoiceStage('typing') }
+  }
+
+  // ── Submit an answer and advance ────────────────────────────────────────────
+  async function submitAnswer(text) {
+    if (!text.trim()) { toast.error('Answer cannot be empty'); return }
+    stopAudio()
+    recognitionRef.current?.abort()
+    const q = questions[current]
+    const updated = { ...answers, [q.key]: text.trim() }
+    setAnswers(updated)
+
+    // After aadhaar_last4 is answered → generate & send OTP
+    if (q.key === 'aadhaar_last4') {
+      try {
+        const res = await fetch('/api/ai-call/generate-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: phone.replace(/\D/g, ''), aadhaar_last4: text.trim() })
+        })
+        const data = await res.json()
+        // Demo: show the OTP in a prominent toast so tester can relay it
+        toast.success(
+          `OTP sent to Aadhaar-registered mobile.\n📟 Demo OTP: ${data.demo_otp}`,
+          { duration: 15000, style: { fontWeight: 'bold', fontSize: '14px' } }
+        )
+      } catch {
+        toast('Could not generate OTP — backend may be offline', { icon: '⚠️' })
+      }
+    }
+
+    // After aadhaar_otp is answered → verify it
+    if (q.key === 'aadhaar_otp') {
+      try {
+        const res = await fetch('/api/ai-call/verify-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: phone.replace(/\D/g, ''), otp: text.trim() })
+        })
+        const data = await res.json()
+        if (data.verified) {
+          toast.success('✅ Aadhaar identity verified successfully!', { duration: 5000 })
+        } else {
+          toast.error('❌ OTP mismatch — identity not verified. Proceeding anyway for demo.')
+        }
+      } catch {
+        toast('OTP verification failed — backend may be offline', { icon: '⚠️' })
+      }
+    }
+
+    if (current + 1 < questions.length) {
+      setCurrent(c => c + 1)
+    } else {
+      doExtract(updated)
+    }
+  }
+
+  // ── Call flow ────────────────────────────────────────────────────────────────
+  async function handleCall() {
+    const digits = phone.replace(/\D/g, '')
+    if (digits.length < 10) { toast.error('Enter a valid 10-digit number'); return }
+    setStage('ringing')
+    await new Promise(r => setTimeout(r, 3000))
+    setStage('ivr')
+  }
+
+  async function handleLangKey(k) {
+    if (loading) return
+    const lang = LANGUAGES.find(l => l.key === k)
+    if (!lang) return
+    setLangKey(k)
+    setLang(lang.name)
+    setShowKeys(false)
+    setIvrMsg('You selected ' + lang.name + ' (' + lang.script + ').\n\nConnecting you to interview questions in ' + lang.name + '...\n\nPlease hold.')
+    setLoading(true)
+
+    try {
+      const res = await getQuestions(phone.replace(/\D/g,''), k)
+      const qs = res.data.questions || []
+      setGreeting(res.data.greeting || '')
+      setQs(qs)
+      setCurrent(0)
+      setAnswers({})
+      setStage('interview')
+      // Speak first question directly here — still close to the gesture unlock above
+      if (qs[0]) {
+        setVoiceStage('speaking')
+        setSpokenText('')
+        setEditText('')
+        speakText(qs[0].question, lang.name)
+      }
+    } catch {
+      toast.error('Backend error — is the server running on port 8000?')
+      setStage('ivr')
+      setShowKeys(true)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function doExtract(finalAnswers) {
+    stopAudio()
+    setStage('reviewing')
+    setLoading(true)
+    try {
+      const res = await extractProfile({ phone: phone.replace(/\D/g,''), language, answers: finalAnswers })
+      setProfile(res.data.profile)
+    } catch {
+      setProfile({ name: finalAnswers.name, skill_type: finalAnswers.skill, bio_english: finalAnswers.about })
+    }
+    setLoading(false)
+    setStage('done')
+  }
+
+  async function handleSave() {
+    setLoading(true)
+    try {
+      await saveProfile(phone.replace(/\D/g,''), profile)
+      toast.success('Profile saved! Worker is now discoverable by customers.')
+      setTimeout(() => navigate('/search'), 1500)
+    } catch {
+      toast.error('Save failed')
+    } finally { setLoading(false) }
+  }
+
+  function endCall() {
+    stopAudio()
+    recognitionRef.current?.abort()
+    setStage('dial'); setPhone(''); setLangKey(''); setQs([]); setAnswers({}); setProfile(null)
+    setVoiceStage('speaking'); setSpokenText(''); setEditText('')
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
       <nav className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
@@ -337,15 +522,15 @@ export default function AICallPage() {
                 </div>
               </div>
               <div className="px-6 pb-6 flex justify-center border-t border-gray-700 pt-4">
-                <button onClick={endCall} className="w-13 h-13 w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-xl hover:bg-red-500">📵</button>
+                <button onClick={endCall} className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-xl hover:bg-red-500">📵</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* IVR: LANGUAGE SELECTION */}
+        {/* IVR: LANGUAGE SELECTION — unchanged */}
         {stage === 'ivr' && (
-          <PhoneFrame>
+          <PhoneFrame timer={timer} phone={phone} endCall={endCall}>
             <div className="font-mono text-sm text-green-300 whitespace-pre leading-relaxed min-h-44">
               {ivrMsg}
               {!showKeys && <span className="inline-block w-2 h-4 bg-green-400 ml-0.5 animate-pulse align-middle" />}
@@ -374,45 +559,122 @@ export default function AICallPage() {
           </PhoneFrame>
         )}
 
-        {/* INTERVIEW */}
-        {stage === 'interview' && questions.length > 0 && (
-          <PhoneFrame>
-            <div className="flex gap-0.5 mb-4">
-              {questions.map((_, i) => (
-                <div key={i} className={'h-1 flex-1 rounded-full transition-all ' + (i < current ? 'bg-green-500' : i === current ? 'bg-indigo-400' : 'bg-gray-700')} />
-              ))}
-            </div>
-            {current === 0 && greeting && (
-              <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 mb-3 text-xs text-gray-300 italic">
-                🤖 {greeting}
+        {/* INTERVIEW — AI speaks → listens → confirms */}
+        {stage === 'interview' && questions.length > 0 && (() => {
+          const q = questions[current]
+          return (
+            <PhoneFrame timer={timer} phone={phone} endCall={endCall}>
+              <div>
+                {/* Progress bar */}
+                <div className="flex gap-0.5 mb-4">
+                  {questions.map((_, i) => (
+                    <div key={i} className={'h-1 flex-1 rounded-full transition-all ' +
+                      (i < current ? 'bg-green-500' : i === current ? 'bg-indigo-400' : 'bg-gray-700')} />
+                  ))}
+                </div>
+
+                {/* Question bubble */}
+                <div className="flex items-start gap-2 mb-4">
+                  <div className="w-7 h-7 bg-indigo-600 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">AI</div>
+                  <div className="bg-gray-800 rounded-2xl rounded-tl-none px-3 py-2.5 text-sm text-gray-100 leading-relaxed flex-1">
+                    {q?.question}
+                  </div>
+                </div>
+
+                {/* SPEAKING */}
+                {voiceStage === 'speaking' && (
+                  <div className="flex flex-col items-center gap-3 py-4">
+                    <SoundWave />
+                    <p className="text-indigo-300 text-xs font-semibold animate-pulse">AI is speaking…</p>
+                    <button
+                      onClick={() => { stopAudio(); setVoiceStage('listening'); startListening(language) }}
+                      className="text-xs text-gray-500 underline hover:text-gray-300 mt-1">
+                      Skip — start listening now
+                    </button>
+                  </div>
+                )}
+
+                {/* LISTENING */}
+                {voiceStage === 'listening' && (
+                  <div className="flex flex-col items-center gap-3 py-3">
+                    <MicPulse />
+                    <p className="text-red-300 text-xs font-semibold animate-pulse">Listening — speak in {language}…</p>
+                    <div className="flex gap-2 mt-1">
+                      <button
+                        onClick={() => { recognitionRef.current?.abort(); setVoiceStage('typing'); setTimeout(() => answerRef.current?.focus(), 100) }}
+                        className="text-xs bg-gray-700 border border-gray-600 text-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition-colors">
+                        ✏️ Type instead
+                      </button>
+                      <button
+                        onClick={() => { recognitionRef.current?.abort(); setVoiceStage('speaking'); speakText(q?.question, language) }}
+                        className="text-xs bg-gray-700 border border-gray-600 text-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition-colors">
+                        🔁 Repeat question
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* CONFIRMING */}
+                {voiceStage === 'confirming' && (
+                  <div className="space-y-3">
+                    <div className="bg-gray-800 border border-indigo-500/50 rounded-xl px-3 py-3">
+                      <p className="text-xs text-indigo-400 mb-1 font-semibold uppercase tracking-wide">Your answer (English):</p>
+                      <p className="text-white text-sm leading-relaxed">{spokenText || '—'}</p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => submitAnswer(spokenText)}
+                        className="bg-green-600 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-green-500 transition-colors">
+                        ✓ Confirm
+                      </button>
+                      <button
+                        onClick={() => { setSpokenText(''); setVoiceStage('listening'); startListening(language) }}
+                        className="bg-gray-700 border border-gray-600 text-gray-200 text-xs font-semibold py-2.5 rounded-xl hover:bg-gray-600 transition-colors">
+                        🔁 Re-record
+                      </button>
+                      <button
+                        onClick={() => { setEditText(spokenText); setVoiceStage('typing'); setTimeout(() => answerRef.current?.focus(), 100) }}
+                        className="bg-gray-700 border border-gray-600 text-gray-200 text-xs font-semibold py-2.5 rounded-xl hover:bg-gray-600 transition-colors">
+                        ✏️ Edit
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* TYPING */}
+                {voiceStage === 'typing' && (
+                  <div className="space-y-2">
+                    <textarea
+                      ref={answerRef}
+                      value={editText}
+                      onChange={e => setEditText(e.target.value)}
+                      placeholder="Type your answer here…"
+                      rows={3}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-600 resize-none"
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitAnswer(editText) } }}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { setVoiceStage('listening'); startListening(language) }}
+                        className="px-3 py-2 bg-gray-700 border border-gray-600 text-gray-300 text-xs font-semibold rounded-lg hover:bg-gray-600 transition-colors">
+                        🎙 Voice
+                      </button>
+                      <button
+                        onClick={() => submitAnswer(editText)}
+                        className="flex-1 bg-indigo-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-indigo-500 transition-colors">
+                        {current + 1 < questions.length ? `Next (${current+1}/${questions.length}) →` : 'Finish ✓'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-            <div className="flex items-start gap-2 mb-3">
-              <div className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">AI</div>
-              <div className="bg-gray-800 rounded-2xl rounded-tl-none px-3 py-2 text-sm text-gray-100 leading-relaxed flex-1">
-                {questions[current].question}
-              </div>
-            </div>
-            <textarea ref={answerRef} value={answer} onChange={e => setAnswer(e.target.value)}
-              placeholder="Type your answer..." rows={3}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-600 resize-none"
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAnswer() } }} />
-            <div className="flex gap-2 mt-2">
-              <button onClick={toggleRecording} disabled={transcribing}
-                className={'px-3 py-2 rounded-lg text-xs font-semibold transition-all border ' + (isRecording ? 'bg-red-600 text-white border-red-600 animate-pulse' : transcribing ? 'bg-yellow-700 text-yellow-200 border-yellow-600 animate-pulse' : 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600')}>
-                {isRecording ? '⏹ Stop' : transcribing ? '⏳ Transcribing...' : '🎙 Voice'}
-              </button>
-              <button onClick={handleAnswer}
-                className="flex-1 bg-indigo-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-indigo-500 transition-colors">
-                {current + 1 < questions.length ? 'Next (' + (current+1) + '/' + questions.length + ') →' : 'Finish ✓'}
-              </button>
-            </div>
-          </PhoneFrame>
-        )}
+            </PhoneFrame>
+          )
+        })()}
 
         {/* REVIEWING */}
         {stage === 'reviewing' && (
-          <PhoneFrame>
+          <PhoneFrame timer={timer} phone={phone} endCall={endCall}>
             <div className="text-center py-8">
               <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
               <p className="text-white font-bold text-sm">Analysing your answers...</p>

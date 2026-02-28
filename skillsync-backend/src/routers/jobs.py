@@ -21,6 +21,32 @@ class JobRespond(BaseModel):
 class JobDispute(BaseModel):
     reason: str
 
+class JobCreate(BaseModel):
+    worker_id: str
+    customer_id: Optional[str] = None
+    description: Optional[str] = None
+    complaint_description: Optional[str] = None
+
+@router.post('/create')
+async def create_job_json(
+    data: JobCreate,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    payload = verify_token(credentials.credentials)
+    desc = data.description or data.complaint_description
+    job = JobRequest(
+        id=str(uuid4()),
+        customer_id=data.customer_id or payload['sub'],
+        worker_id=data.worker_id,
+        complaint_description=desc,
+        job_status='pending'
+    )
+    db.add(job)
+    db.commit()
+    return {'request_id': job.id, 'status': 'pending', 'ai_analysis': {}}
+
+
 @router.post('')
 async def create_job(
     worker_id: str = Form(...),

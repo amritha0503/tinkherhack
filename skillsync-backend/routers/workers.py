@@ -208,8 +208,7 @@ def search_workers(
     for w in all_workers:
         if w.location_lat is not None and w.location_lng is not None:
             dist = haversine(lat, lng, w.location_lat, w.location_lng)
-            effective_radius = min(radius_km, w.work_radius_km or radius_km)
-            if dist <= effective_radius:
+            if dist <= radius_km:
                 ledger = db.query(WorkLedger).filter(WorkLedger.worker_id == w.id).all()
                 avg_rating = round(sum(e.rating for e in ledger) / len(ledger), 1) if ledger else 0.0
                 results.append({
