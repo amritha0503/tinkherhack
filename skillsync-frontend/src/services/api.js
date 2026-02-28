@@ -1,7 +1,13 @@
 import axios from 'axios'
 
+// In dev: Vite proxy rewrites /api → localhost:8000
+// In production: VITE_API_URL = https://your-backend.onrender.com
+const baseURL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL + '/api'
+  : '/api'
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL,
   timeout: 30000,
 })
 
