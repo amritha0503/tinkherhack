@@ -3,8 +3,12 @@ import os
 import json
 import tempfile
 import time
-from PIL import Image
 from dotenv import load_dotenv
+
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 
 load_dotenv()
 
@@ -188,7 +192,7 @@ Transcript: {transcript}'''
         raise RuntimeError(f'extract_profile failed: {str(e)}')
 
 def analyze_complaint_photo(image_path: str) -> dict:
-    if not model:
+    if not model or Image is None:
         return {
             'issue_type': 'other',
             'confidence_score': 0.5,

@@ -8,7 +8,7 @@ from uuid import uuid4
 import os
 import uvicorn
 import models
-from routers import workers, customers, jobs, reviews, calls, emergency, ivr, auth_router
+from src.routers import workers, customers, jobs, reviews, calls, emergency, ivr, auth_router
 from src.routers.ai_call import router as ai_call_router
 
 app = FastAPI(

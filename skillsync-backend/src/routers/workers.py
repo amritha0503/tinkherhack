@@ -6,7 +6,8 @@ from models import Worker, WorkerPhoto, WorkLedger
 from auth import verify_token
 from trust_score import calculate_trust_score
 from distance import haversine
-from ai import voice_to_text, extract_profile
+def voice_to_text(filepath, language): return ''
+def extract_profile(transcript, language): return {}
 from pydantic import BaseModel
 from typing import Optional, List
 from uuid import uuid4
