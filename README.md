@@ -130,7 +130,7 @@ npm run dev
 ## Project Documentation
 
 ### Screenshots
-
+https://drive.google.com/drive/folders/19lt6FwZe0JO0hJ7oDRt4mGuJp3Hl60Q2?usp=sharing
 #### 1. AI Call — Worker Onboarding (Malayalam)
 ![AI Call Interface](docs/ai_call.png)
 *Voice-first onboarding: AI asks questions in the worker's native language (Malayalam shown). Worker speaks answers — system translates to English, shows confirmation screen with Confirm / Re-record / Edit options.*
