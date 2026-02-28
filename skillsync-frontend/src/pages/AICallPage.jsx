@@ -303,8 +303,12 @@ export default function AICallPage() {
           setSpokenText(eng)
           setEditText(eng)
         } catch {
-          setSpokenText(text)
+          // Translation failed — switch to typing mode so user can type in English
+          setVoiceStage('typing')
           setEditText(text)
+          setSpokenText(text)
+          toast.error('Could not translate — please type your answer in English')
+          setTimeout(() => answerRef.current?.focus(), 100)
         }
       } else {
         setSpokenText(text)

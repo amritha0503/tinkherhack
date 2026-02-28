@@ -203,10 +203,9 @@ def translate_to_english(req: TranslateRequest):
     """
     if req.source_language == "English":
         return {"translated": req.text, "original": req.text}
-    lang_code = GTTS_LANG.get(req.source_language, "auto")
     try:
         from deep_translator import GoogleTranslator
-        translated = GoogleTranslator(source=lang_code, target="en").translate(req.text)
+        translated = GoogleTranslator(source='auto', target='en').translate(req.text)
         return {"translated": translated, "original": req.text}
     except Exception as e:
         raise HTTPException(500, detail=f"Translation failed: {str(e)}")
