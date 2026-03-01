@@ -156,11 +156,13 @@ export default function AICallPage() {
   const [editText, setEditText]       = useState('')   // editable copy in 'typing'
   const [demoOtp, setDemoOtp]         = useState('')   // OTP shown inline on OTP question
   const [otpLoading, setOtpLoading]   = useState(false)
+  const [aadhaarVerified, setAadhaarVerified] = useState(false)
   const answerRef        = useRef(null)
   const recognitionRef   = useRef(null)
   const audioRef         = useRef(null)  // current TTS audio element
   const langRef          = useRef('')    // always-current language for callbacks
   const aadhaarLast4Ref  = useRef('')    // last4 digits stored for OTP generation
+  const demoOtpRef       = useRef('')    // always-current OTP to avoid stale closure
 
   const callActive = ['ivr','interview','reviewing'].includes(stage)
   const timer = useTimer(callActive)
@@ -238,8 +240,8 @@ export default function AICallPage() {
       body: JSON.stringify({ phone: phone.replace(/\D/g, ''), aadhaar_last4: aadhaarLast4Ref.current })
     })
       .then(r => r.json())
-      .then(data => { setDemoOtp(data.demo_otp || ''); setOtpLoading(false) })
-      .catch(() => { setDemoOtp(''); setOtpLoading(false) })
+      .then(data => { const otp = data.demo_otp || ''; setDemoOtp(otp); demoOtpRef.current = otp; setOtpLoading(false) })
+      .catch(() => { setDemoOtp(''); demoOtpRef.current = ''; setOtpLoading(false) })
   }, [current, stage])
   // ── TTS: speak text via backend gTTS — works for ALL Indian languages ───────
   async function speakText(text, lang) {
@@ -373,33 +375,27 @@ export default function AICallPage() {
       aadhaarLast4Ref.current = text.trim()
     }
 
-    // After aadhaar_otp is answered → verify it
+    // After aadhaar_otp is answered → verify it locally against the OTP shown on screen
     if (q.key === 'aadhaar_otp') {
-      try {
-        const res = await fetch(apiBase + '/ai-call/verify-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: phone.replace(/\D/g, ''), otp: text.trim() })
-        })
-        const data = await res.json()
-        if (data.verified) {
-          toast.success('✅ OTP Validated! Identity confirmed.', { duration: 5000 })
-          // fall through to advance to next question / doExtract
-        } else {
-          // Wrong OTP — revert answer, re-ask question, let user try again
-          setAnswers(prev => { const c = {...prev}; delete c[q.key]; return c })
-          setSpokenText('')
-          setEditText('')
-          toast.error('❌ Incorrect OTP. Please listen and try again.', { duration: 5000 })
-          speakText(q.question, language)   // re-announce the OTP question
-          return
-        }
-      } catch {
-        // Backend unreachable — block progress
+      const currentOtp = demoOtpRef.current
+      if (!currentOtp) {
         setAnswers(prev => { const c = {...prev}; delete c[q.key]; return c })
         setSpokenText('')
         setEditText('')
-        toast.error('OTP verification failed — please check your connection and try again.', { duration: 5000 })
+        toast.error('OTP not generated yet. Please wait and try again.', { duration: 5000 })
+        return
+      }
+      if (text.trim() === currentOtp) {
+        setAadhaarVerified(true)
+        toast.success('OTP Validated! Identity confirmed.', { duration: 3000 })
+        // OTP is always the last question — auto-extract and save
+        doExtract(updated, true)
+        return
+      } else {
+        setAnswers(prev => { const c = {...prev}; delete c[q.key]; return c })
+        setSpokenText('')
+        setEditText('')
+        toast.error('Incorrect OTP. Please check and try again.', { duration: 5000 })
         speakText(q.question, language)
         return
       }
@@ -455,15 +451,16 @@ export default function AICallPage() {
     }
   }
 
-  async function doExtract(finalAnswers) {
+  async function doExtract(finalAnswers, autoSave = false) {
     stopAudio()
     setStage('reviewing')
     setLoading(true)
+    let merged
     try {
       const res = await extractProfile({ phone: phone.replace(/\D/g,''), language, answers: finalAnswers })
       const aiProfile = res.data.profile || {}
       // Always prefer the raw spoken answers for core fields — AI transcript can misparse numbers
-      const merged = {
+      merged = {
         ...aiProfile,
         name:             finalAnswers.name             || aiProfile.name,
         skill_type:       finalAnswers.skill            || aiProfile.skill_type,
@@ -472,27 +469,48 @@ export default function AICallPage() {
         location_hint:    finalAnswers.location         || aiProfile.location_hint,
         bio_english:      aiProfile.bio_english         || finalAnswers.about,
       }
-      setProfile(merged)
     } catch {
-      setProfile({
+      merged = {
         name:             finalAnswers.name,
         skill_type:       finalAnswers.skill,
         experience_years: parseInt(finalAnswers.experience)   || 0,
         daily_rate:       parseFloat(finalAnswers.daily_rate) || null,
         location_hint:    finalAnswers.location,
         bio_english:      finalAnswers.about,
-      })
+      }
     }
+    setProfile(merged)
     setLoading(false)
-    setStage('done')
+
+    if (autoSave) {
+      // Auto-save immediately after OTP verified — no manual button needed
+      try {
+        const saveRes = await saveProfile(phone.replace(/\D/g,''), { ...merged, aadhaar_verified: true })
+        const workerId   = saveRes?.data?.worker_id
+        const workerName = saveRes?.data?.worker_name || merged.name
+        toast.success('Profile saved! Finding workers near you...', { duration: 3000 })
+        setTimeout(() => navigate('/search', { state: { newWorkerId: workerId, workerName } }), 1500)
+      } catch {
+        toast.error('Save failed — please try again')
+        setStage('done')
+      }
+    } else {
+      setStage('done')
+    }
   }
 
   async function handleSave() {
+    if (!aadhaarVerified) {
+      toast.error('Aadhaar OTP not verified. Profile cannot be saved.')
+      return
+    }
     setLoading(true)
     try {
-      await saveProfile(phone.replace(/\D/g,''), profile)
+      const saveRes = await saveProfile(phone.replace(/\D/g,''), { ...profile, aadhaar_verified: true })
+      const workerId   = saveRes?.data?.worker_id
+      const workerName = saveRes?.data?.worker_name || profile?.name
       toast.success('Profile saved! Worker is now discoverable by customers.')
-      setTimeout(() => navigate('/search'), 1500)
+      setTimeout(() => navigate('/search', { state: { newWorkerId: workerId, workerName } }), 1500)
     } catch {
       toast.error('Save failed')
     } finally { setLoading(false) }
@@ -503,6 +521,8 @@ export default function AICallPage() {
     recognitionRef.current?.abort()
     setStage('dial'); setPhone(''); setLangKey(''); setQs([]); setAnswers({}); setProfile(null)
     setVoiceStage('speaking'); setSpokenText(''); setEditText(''); setDemoOtp('')
+    setAadhaarVerified(false)
+    demoOtpRef.current = ''
     aadhaarLast4Ref.current = ''
   }
 

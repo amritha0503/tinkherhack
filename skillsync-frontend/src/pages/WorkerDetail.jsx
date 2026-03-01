@@ -64,7 +64,7 @@ function StarRating({ value, onChange, size = 'text-2xl' }) {
           onMouseLeave={() => setHover(0)}
           onClick={() => onChange(star)}
         >
-          
+          ★
         </button>
       ))}
     </div>

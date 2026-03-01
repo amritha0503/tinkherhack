@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from database import engine, Base
 import models
 from routers import workers, customers, jobs, reviews, calls, emergency, ivr, auth_router
+from src.routers.ai_call import router as ai_call_router
 from sqlalchemy.orm import Session
 from database import SessionLocal
 from uuid import uuid4
@@ -43,12 +44,13 @@ app.include_router(reviews.router,      prefix='/api/reviews',   tags=['Reviews'
 app.include_router(calls.router,        prefix='/api/calls',     tags=['Calls'])
 app.include_router(emergency.router,    prefix='/api/emergency', tags=['Emergency'])
 app.include_router(ivr.router,          prefix='/api/ivr',       tags=['IVR'])
+app.include_router(ai_call_router)
 
 def seed_demo_data():
     db: Session = SessionLocal()
     try:
         if db.query(models.Worker).count() > 0:
-            print('ℹ️  Demo data already exists, skipping seed.')
+            print('[INFO] Demo data already exists, skipping seed.')
             return
         demo_workers = [
             models.Worker(
@@ -90,9 +92,9 @@ def seed_demo_data():
         for w in demo_workers:
             db.add(w)
         db.commit()
-        print('✅ Demo data seeded — 5 workers added')
+        print('[OK] Demo data seeded - 5 workers added')
     except Exception as e:
-        print(f'❌ Seed failed: {e}')
+        print(f'[ERROR] Seed failed: {e}')
         db.rollback()
     finally:
         db.close()
@@ -104,7 +106,7 @@ def startup_event():
 @app.get('/')
 def root():
     return {
-        'message': 'SkillSync API is running ✅',
+        'message': 'SkillSync API is running',
         'docs': '/docs',
         'version': '1.0.0'
     }

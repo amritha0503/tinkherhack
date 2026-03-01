@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
-import { searchWorkers } from '../services/api'
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom'
+import { searchWorkers, getWorker } from '../services/api'
 
 const SKILLS = ['Electrician','Plumber','Carpenter','Mason','Painter','Welder','Cook','Other']
 const BADGE_COLOR = { Green:'bg-green-100 text-green-800', Yellow:'bg-yellow-100 text-yellow-800', Red:'bg-red-100 text-red-800' }
@@ -25,6 +25,12 @@ function FilterChip({ label, onRemove }) {
 export default function WorkerSearch() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
+  const navLocation = useLocation()
+
+  // Newly registered worker passed from AI call flow
+  const newWorkerId   = navLocation.state?.newWorkerId
+  const newWorkerName = navLocation.state?.workerName
+  const [newWorker, setNewWorker] = useState(null)
 
   // Remote data
   const [workers, setWorkers]     = useState([])
@@ -44,7 +50,15 @@ export default function WorkerSearch() {
   const [sortBy,        setSortBy]        = useState('distance')
   const [showFilters,   setShowFilters]   = useState(false)
 
-  // Geolocation â†’ fetch on mount
+  // Fetch newly registered worker's profile to show at top
+  useEffect(() => {
+    if (!newWorkerId) return
+    getWorker(newWorkerId)
+      .then(({ data }) => setNewWorker(data))
+      .catch(() => {})
+  }, [newWorkerId])
+
+  // Geolocation → fetch on mount
   useEffect(() => {
     if (!navigator.geolocation) {
       setLocStatus('denied'); setSortBy('trust'); fetchWorkers(null); return
@@ -283,7 +297,53 @@ export default function WorkerSearch() {
           </div>
         </div>
 
-        {/* â”€â”€ Worker cards â”€â”€ */}
+        {/* ── YOUR PROFILE banner (shown after AI call registration) ── */}
+        {newWorker && (
+          <div className="mb-8 rounded-2xl border-2 border-indigo-400 bg-indigo-50 shadow-md overflow-hidden">
+            <div className="flex items-center gap-2 bg-indigo-600 px-4 py-2">
+              <span className="text-white font-black text-sm tracking-wide">✓ YOUR PROFILE IS LIVE</span>
+              <span className="ml-auto text-indigo-200 text-xs">Visible to customers</span>
+            </div>
+            <div className="p-5 flex items-start gap-4">
+              <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-indigo-600 font-black text-2xl shadow border border-indigo-200 shrink-0">
+                {(newWorker.name || '?')[0].toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3 flex-wrap mb-1">
+                  <h2 className="text-lg font-black text-gray-900">{newWorker.name || 'Your Profile'}</h2>
+                  {newWorker.aadhaar_verified && (
+                    <span className="bg-green-100 text-green-700 text-xs font-bold px-2.5 py-0.5 rounded-full">Aadhaar Verified</span>
+                  )}
+                  {newWorker.trust_badge && (
+                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${BADGE_COLOR[newWorker.trust_badge] || 'bg-gray-100 text-gray-600'}`}>
+                      {newWorker.trust_badge} {newWorker.trust_score}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-gray-500 mb-2">{newWorker.location_area || 'Location not set'}</p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {newWorker.skill_type && (
+                    <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2.5 py-1 rounded-full">{newWorker.skill_type}</span>
+                  )}
+                  <span className="bg-gray-100 text-gray-600 text-xs px-2.5 py-1 rounded-full">{newWorker.experience_years || 0} yrs exp</span>
+                  {newWorker.daily_rate && (
+                    <span className="bg-white border border-gray-200 text-gray-700 text-xs font-bold px-2.5 py-1 rounded-full">Rs.{newWorker.daily_rate}/day</span>
+                  )}
+                </div>
+                {newWorker.bio_text && (
+                  <p className="text-sm text-gray-500 line-clamp-2">{newWorker.bio_text}</p>
+                )}
+              </div>
+              <button
+                onClick={() => navigate(`/worker/${newWorker.id}`)}
+                className="shrink-0 text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 font-semibold">
+                View Profile →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Worker cards ── */}
         {loading ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_,i) => (

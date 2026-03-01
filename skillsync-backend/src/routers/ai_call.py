@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 import ai as ai_module
 import models
 from src.database import SessionLocal
+from trust_score import calculate_trust_score
 
 router = APIRouter(prefix="/api/ai-call", tags=["AI Call"])
 
@@ -418,14 +419,32 @@ def save_worker_profile(phone: str, profile: dict, db: Session = Depends(get_db)
     worker.bio_text = profile.get("bio_text") or profile.get("bio_english") or worker.bio_text
     # location_hint comes from extract-profile which maps the 'location' answer
     worker.location_area = profile.get("location_hint") or profile.get("location_area") or worker.location_area
+    # aadhaar_verified is set when OTP was confirmed on the frontend
+    if profile.get("aadhaar_verified"):
+        worker.aadhaar_verified = True
     worker.account_status = 'active'
     worker.profile_complete = True
+
+    # Normalize skill_type to Title Case so it matches seed data (e.g. "plumber" → "Plumber")
+    if worker.skill_type:
+        worker.skill_type = worker.skill_type.strip().title()
 
     db.commit()
     db.refresh(worker)
 
+    # Recalculate trust score so trust_badge is set for the search results
+    try:
+        score_data = calculate_trust_score(worker.id, db)
+        worker.trust_score = score_data.get("total_score", 0)
+        worker.trust_badge = score_data.get("badge", "Red")
+        db.commit()
+        db.refresh(worker)
+    except Exception:
+        pass
+
     return {
         "success": True,
         "worker_id": worker.id,
+        "worker_name": worker.name or phone,
         "message": f"Profile saved for {worker.name or phone}"
     }
